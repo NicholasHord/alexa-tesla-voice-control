@@ -1,0 +1,38 @@
+services:
+  alexa-tesla:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./.env:/app/.env
+      - ./data:/app/data
+      - ./certs:/app/certs:ro
+      - ./public:/app/public:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - tesla-command-proxy
+
+  tesla-command-proxy:
+    image: tesla/vehicle-command:latest
+    restart: unless-stopped
+    command:
+      - "-host"
+      - "0.0.0.0"
+      - "-port"
+      - "4443"
+      - "-tls-key"
+      - "/certs/proxy-key.pem"
+      - "-cert"
+      - "/certs/proxy-cert.pem"
+      - "-key-file"
+      - "/keys/private-key.pem"
+      - "-session-cache"
+      - "/data/tesla-command-cache.json"
+    volumes:
+      - ./keys:/keys:ro
+      - ./certs:/certs:ro
+      - ./data:/data
+    expose:
+      - "4443"

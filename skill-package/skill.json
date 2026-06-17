@@ -1,0 +1,45 @@
+{
+  "manifest": {
+    "manifestVersion": "1.0",
+    "publishingInformation": {
+      "locales": {
+        "en-US": {
+          "name": "Tesla Personal Control",
+          "summary": "Personal Tesla voice control for a private Alexa development skill.",
+          "description": "Personal-use Alexa Custom Skill that sends selected Tesla vehicle commands through a self-hosted service using Tesla Fleet API and virtual-key authorization.",
+          "examplePhrases": [
+            "Alexa, ask Tesla to lock my car",
+            "Alexa, ask Tesla to start climate",
+            "Alexa, ask Tesla for vehicle status"
+          ],
+          "keywords": [
+            "tesla",
+            "personal",
+            "vehicle"
+          ]
+        }
+      },
+      "isAvailableWorldwide": false,
+      "testingInstructions": "Personal development skill. Endpoint must be configured to the user's self-hosted HTTPS Alexa Tesla service.",
+      "category": "PRODUCTIVITY",
+      "distributionCountries": [
+        "US"
+      ]
+    },
+    "apis": {
+      "custom": {
+        "endpoint": {
+          "uri": "https://YOUR_DOMAIN/alexa",
+          "sslCertificateType": "Trusted"
+        }
+      }
+    },
+    "privacyAndCompliance": {
+      "allowsPurchases": false,
+      "usesPersonalInfo": false,
+      "isChildDirected": false,
+      "isExportCompliant": true,
+      "containsAds": false
+    }
+  }
+}

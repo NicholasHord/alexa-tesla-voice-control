@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+data/
+keys/
+certs/
+public/*.pem
+node_modules/
+dist/
+coverage/
+npm-debug.log*
+*.local

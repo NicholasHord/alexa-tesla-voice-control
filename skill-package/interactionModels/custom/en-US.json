@@ -1,0 +1,144 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "tesla",
+      "intents": [
+        {
+          "name": "UnlockVehicleIntent",
+          "slots": [],
+          "samples": [
+            "unlock my car",
+            "unlock the car",
+            "unlock"
+          ]
+        },
+        {
+          "name": "LockVehicleIntent",
+          "slots": [],
+          "samples": [
+            "lock my car",
+            "lock the car",
+            "lock"
+          ]
+        },
+        {
+          "name": "OpenTrunkIntent",
+          "slots": [
+            {
+              "name": "trunkType",
+              "type": "TRUNK_TYPE"
+            }
+          ],
+          "samples": [
+            "open the trunk",
+            "open my trunk",
+            "open the rear trunk",
+            "open {trunkType}"
+          ]
+        },
+        {
+          "name": "OpenFrunkIntent",
+          "slots": [],
+          "samples": [
+            "open the front trunk",
+            "open the frunk",
+            "open my frunk"
+          ]
+        },
+        {
+          "name": "StartClimateIntent",
+          "slots": [],
+          "samples": [
+            "start climate",
+            "turn on climate",
+            "start preconditioning",
+            "precondition the car"
+          ]
+        },
+        {
+          "name": "StopClimateIntent",
+          "slots": [],
+          "samples": [
+            "stop climate",
+            "turn off climate",
+            "stop preconditioning"
+          ]
+        },
+        {
+          "name": "CoolCarIntent",
+          "slots": [],
+          "samples": [
+            "cool the car",
+            "cool down the car",
+            "make the car cooler"
+          ]
+        },
+        {
+          "name": "VehicleStatusIntent",
+          "slots": [],
+          "samples": [
+            "for vehicle status",
+            "vehicle status",
+            "car status",
+            "how is my car",
+            "what is my battery level"
+          ]
+        },
+        {
+          "name": "ConfirmPinIntent",
+          "slots": [
+            {
+              "name": "pin",
+              "type": "AMAZON.NUMBER"
+            }
+          ],
+          "samples": [
+            "my pin is {pin}",
+            "{pin}",
+            "pin {pin}"
+          ]
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.FallbackIntent",
+          "samples": []
+        }
+      ],
+      "types": [
+        {
+          "name": "TRUNK_TYPE",
+          "values": [
+            {
+              "name": {
+                "value": "trunk",
+                "synonyms": [
+                  "rear trunk",
+                  "back trunk"
+                ]
+              }
+            },
+            {
+              "name": {
+                "value": "frunk",
+                "synonyms": [
+                  "front trunk"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,10 @@
+.git
+.env
+.env.*
+!.env.example
+node_modules
+data
+keys
+certs
+coverage
+npm-debug.log*
