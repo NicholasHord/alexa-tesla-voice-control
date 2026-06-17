@@ -25,7 +25,7 @@ npm start
 Send a launch request:
 
 ```bash
-curl -s http://localhost:3000/alexa \
+curl -s http://localhost:18765/alexa \
   -H 'content-type: application/json' \
   -d '{
     "session": { "application": { "applicationId": "amzn1.ask.skill.local-test" } },
@@ -85,4 +85,3 @@ docker compose logs tesla-command-proxy
 ```
 
 A command failure mentioning virtual-key authorization usually means the public key is not hosted at the required path, the virtual key was not enrolled, or the wrong private key is mounted.
-

@@ -10,7 +10,7 @@ services:
       - ./certs:/app/certs:ro
       - ./public:/app/public:ro
     ports:
-      - "3000:3000"
+      - "${HOST_PORT:-18765}:3000"
     depends_on:
       - tesla-command-proxy
 

@@ -45,6 +45,7 @@ Required variables:
 | `TESLA_TOKEN_FILE` | Writable JSON file for rotated tokens. |
 | `TESLA_COMMAND_PROXY_URL` | Internal URL for Tesla's official command proxy. |
 | `TESLA_COMMAND_PROXY_CA_CERT` | CA/cert file trusted by the app for the proxy TLS cert. |
+| `HOST_PORT` | Host port bound by Docker Compose. Defaults to `18765` to avoid common conflicts. |
 | `COMMAND_PIN` | Optional PIN for unlock and trunk/frunk commands. |
 
 ## Generate Local Proxy TLS Certificate
@@ -73,7 +74,7 @@ docker compose logs -f alexa-tesla
 Health check:
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:18765/health
 ```
 
 ## HTTPS Exposure
@@ -88,7 +89,7 @@ Example Caddyfile:
 
 ```caddyfile
 tesla.example.com {
-  reverse_proxy 127.0.0.1:3000
+  reverse_proxy 127.0.0.1:18765
 
   handle /.well-known/appspecific/com.tesla.3p.public-key.pem {
     root * /srv/tesla-public-key

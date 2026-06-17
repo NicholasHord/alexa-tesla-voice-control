@@ -97,7 +97,7 @@ Start the service and test status:
 
 ```bash
 docker compose up -d --build
-curl http://localhost:3000/health
+curl http://localhost:18765/health
 ```
 
 Use the Alexa developer console or the JSON fixtures in `docs/TESTING.md` to send a status intent. Status may wake the vehicle because Tesla's live `vehicle_data` endpoint requires the car to be reachable.

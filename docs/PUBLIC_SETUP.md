@@ -22,7 +22,7 @@ The installer:
 Open:
 
 ```text
-http://SERVER_IP:3000/setup?token=SETUP_TOKEN
+http://SERVER_IP:18765/setup?token=SETUP_TOKEN
 ```
 
 The setup page can save local configuration, build Tesla OAuth links, exchange a pasted OAuth code, validate the public-key URL, and provide Alexa setup files.
@@ -71,4 +71,3 @@ After configuration succeeds:
    ```
 
 The Alexa endpoint remains active after setup is disabled.
-

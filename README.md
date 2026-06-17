@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/NicholasHord/alexa-tesla-voice-cont
 The installer clones this repo into `/opt/alexa-tesla`, prepares local secret directories, starts Docker Compose, and prints a setup URL like:
 
 ```text
-http://SERVER_IP:3000/setup?token=SETUP_TOKEN
+http://SERVER_IP:18765/setup?token=SETUP_TOKEN
 ```
 
 For manual install:
@@ -187,6 +187,7 @@ ask deploy
 - Set `COMMAND_PIN` for unlock and trunk/frunk commands.
 - The token file is stored under `data/` and excluded from Git.
 - Disable `SETUP_ENABLED` after configuration is complete.
+- `HOST_PORT` defaults to `18765` to avoid common home-server port conflicts. The container still listens on `PORT=3000` internally.
 
 ## References
 

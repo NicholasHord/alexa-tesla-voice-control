@@ -39,6 +39,10 @@ fi
 docker compose up -d --build
 
 setup_token="$(grep -E '^SETUP_ADMIN_TOKEN=' .env | tail -n 1 | cut -d= -f2-)"
+host_port="$(grep -E '^HOST_PORT=' .env | tail -n 1 | cut -d= -f2-)"
+if [ -z "$host_port" ]; then
+  host_port="18765"
+fi
 host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
 if [ -z "$host_ip" ]; then
   host_ip="SERVER_IP"
@@ -49,7 +53,7 @@ cat <<NEXT
 Install complete.
 
 Open setup from your workstation:
-http://${host_ip}:3000/setup?token=${setup_token}
+http://${host_ip}:${host_port}/setup?token=${setup_token}
 
 If that address is not reachable, replace ${host_ip} with the server hostname or LAN IP.
 Keep the setup token private and disable setup after configuration.

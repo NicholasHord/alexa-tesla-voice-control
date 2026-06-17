@@ -62,10 +62,10 @@ docker compose up -d --build
 Open:
 
 ```text
-http://SERVER_IP:3000/setup?token=SETUP_TOKEN
+http://SERVER_IP:18765/setup?token=SETUP_TOKEN
 ```
 
-The setup token is in `.env` as `SETUP_ADMIN_TOKEN`.
+The setup token is in `.env` as `SETUP_ADMIN_TOKEN`. The host port is in `.env` as `HOST_PORT`; the default is `18765`.
 
 ## 5. Generate the Tesla Virtual Key
 
@@ -111,6 +111,7 @@ TESLA_FLEET_BASE_URL=https://fleet-api.prd.na.vn.cloud.tesla.com
 TESLA_TOKEN_FILE=/app/data/tesla-tokens.json
 TESLA_COMMAND_PROXY_URL=https://tesla-command-proxy:4443
 TESLA_COMMAND_PROXY_CA_CERT=/app/certs/proxy-cert.pem
+HOST_PORT=18765
 ```
 
 ## 7. Publish the Tesla Public Key
@@ -125,7 +126,7 @@ With Caddy, one straightforward reverse-proxy pattern is:
 
 ```caddyfile
 tesla.example.com {
-  reverse_proxy 127.0.0.1:3000
+  reverse_proxy 127.0.0.1:18765
 }
 ```
 
@@ -162,7 +163,7 @@ The token file is written under `data/` through the Docker volume.
 ```bash
 docker compose up -d --build
 docker compose ps
-curl http://localhost:3000/health
+curl http://localhost:18765/health
 ```
 
 Follow logs:

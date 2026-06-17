@@ -53,6 +53,7 @@ else
 fi
 
 set_env_value "APP_ENV_FILE" "/app/.env"
+set_env_value "HOST_PORT" "18765"
 set_env_value "TESLA_PUBLIC_KEY_FILE" "/app/public/com.tesla.3p.public-key.pem"
 
 if ! command -v openssl >/dev/null 2>&1; then

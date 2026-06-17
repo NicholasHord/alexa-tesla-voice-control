@@ -54,6 +54,7 @@ fi
 
 for name in \
   PUBLIC_BASE_URL \
+  HOST_PORT \
   ALEXA_SKILL_ID \
   TESLA_CLIENT_ID \
   TESLA_CLIENT_SECRET \
