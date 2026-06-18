@@ -20,7 +20,7 @@ This is the best fit for personal use because:
 - Docker and Docker Compose.
 - Node.js 20 or newer for helper scripts and local tests.
 - A domain or HTTPS tunnel reachable by Alexa.
-- A Tesla developer app, OAuth refresh token, VIN, and enrolled virtual key.
+- A Tesla developer app, registered partner domain, OAuth token, VIN, and enrolled virtual key.
 
 For a Git-based home-server trial run, start with [HOME_SERVER_INSTALL.md](HOME_SERVER_INSTALL.md). For Alexa console setup, use [ALEXA_SKILL.md](ALEXA_SKILL.md).
 
@@ -46,6 +46,7 @@ Required variables:
 | `TESLA_COMMAND_PROXY_URL` | Internal URL for Tesla's official command proxy. |
 | `TESLA_COMMAND_PROXY_CA_CERT` | CA/cert file trusted by the app for the proxy TLS cert. |
 | `HOST_PORT` | Host port bound by Docker Compose. Defaults to `18765` to avoid common conflicts. |
+| `COMPOSE_PROFILES` | Set to `vehicle-commands` after virtual keys exist so the command proxy starts. |
 | `COMMAND_PIN` | Optional PIN for unlock and trunk/frunk commands. |
 
 ## Generate Local Proxy TLS Certificate
@@ -65,6 +66,14 @@ openssl req -x509 -newkey rsa:2048 -nodes \
 Keep `certs/proxy-key.pem` out of Git.
 
 ## Start
+
+For first-run setup before virtual keys exist:
+
+```bash
+docker compose up -d --build
+```
+
+After `scripts/generate-tesla-virtual-key.sh` enables `COMPOSE_PROFILES=vehicle-commands`, restart:
 
 ```bash
 docker compose up -d --build
@@ -90,11 +99,6 @@ Example Caddyfile:
 ```caddyfile
 tesla.example.com {
   reverse_proxy 127.0.0.1:18765
-
-  handle /.well-known/appspecific/com.tesla.3p.public-key.pem {
-    root * /srv/tesla-public-key
-    file_server
-  }
 }
 ```
 

@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate JSON files
+        run: |
+          node -e "const fs=require('node:fs'); for (const file of ['package.json','package-lock.json','ask-resources.json','alexa/interaction-model.json','skill-package/skill.json','skill-package/interactionModels/custom/en-US.json']) JSON.parse(fs.readFileSync(file,'utf8'));"
+
+      - name: Check shell syntax
+        run: bash -n scripts/*.sh
+
+      - run: npm test
+
+      - name: Ensure generated secrets are not tracked
+        run: |
+          forbidden="$(
+            git ls-files \
+              '.env' \
+              '.env.*' \
+              'data/*' \
+              'keys/*' \
+              'certs/*' \
+              'public/*.pem' \
+              '*.key' \
+              '*.pem' \
+              '*.p12' \
+              '*.token' \
+              '*.tokens.json' |
+            grep -v '^\.env\.example$' || true
+          )"
+          if [ -n "$forbidden" ]; then
+            echo "Generated secrets or key material must not be tracked:"
+            echo "$forbidden"
+            exit 1
+          fi

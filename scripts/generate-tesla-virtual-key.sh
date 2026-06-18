@@ -38,10 +38,22 @@ chmod 644 keys/public-key.pem
 cp keys/public-key.pem public/com.tesla.3p.public-key.pem
 chmod 644 public/com.tesla.3p.public-key.pem
 
+if [ -f .env ]; then
+  if grep -qE '^COMPOSE_PROFILES=' .env; then
+    sed -i.bak 's|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=vehicle-commands|' .env
+    rm -f .env.bak
+  else
+    printf 'COMPOSE_PROFILES=vehicle-commands\n' >> .env
+  fi
+fi
+
 cat <<'NEXT'
 Generated:
 - keys/private-key.pem  KEEP PRIVATE. Do not copy to a web server public root.
 - keys/public-key.pem
 - public/com.tesla.3p.public-key.pem  Served by the app at:
   https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem
+
+COMPOSE_PROFILES=vehicle-commands was enabled in .env when .env was present.
+Restart with: docker compose up -d --build
 NEXT

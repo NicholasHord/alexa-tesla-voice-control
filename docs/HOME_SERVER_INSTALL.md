@@ -20,7 +20,13 @@ Use this guide to install the project on a Docker-capable Linux server.
 curl -fsSL https://raw.githubusercontent.com/NicholasHord/alexa-tesla-voice-control/master/scripts/install-home-server.sh | bash
 ```
 
-The installer prints a setup URL with a local setup token. Keep that URL private.
+The installer requires Docker by default. If Docker is not installed and you want to use Docker's official Linux convenience installer, opt in explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NicholasHord/alexa-tesla-voice-control/master/scripts/install-home-server.sh | INSTALL_DOCKER=1 bash
+```
+
+The installer checks that `HOST_PORT` is available, starts the setup UI, and prints a setup URL with a local setup token. Keep that URL private.
 
 ## 2. Manual Clone from Git
 
@@ -53,7 +59,7 @@ The setup script does not overwrite existing secrets.
 
 ## 4. Open Web Setup
 
-Start the stack:
+Start the setup UI:
 
 ```bash
 docker compose up -d --build
@@ -83,6 +89,8 @@ public/com.tesla.3p.public-key.pem
 
 Keep `keys/private-key.pem` private. The app serves only `public/com.tesla.3p.public-key.pem`.
 
+The script also writes `COMPOSE_PROFILES=vehicle-commands` to `.env` so the Tesla command proxy starts after the next Docker Compose restart. Before this key step, only the setup UI runs.
+
 ## 6. Configure `.env`
 
 Edit:
@@ -108,6 +116,7 @@ Leave these defaults unless your Tesla Fleet API region is different:
 TESLA_AUDIENCE=https://fleet-api.prd.na.vn.cloud.tesla.com
 TESLA_AUTH_BASE_URL=https://fleet-auth.prd.vn.cloud.tesla.com
 TESLA_FLEET_BASE_URL=https://fleet-api.prd.na.vn.cloud.tesla.com
+TESLA_PARTNER_SCOPES=openid vehicle_device_data vehicle_cmds
 TESLA_TOKEN_FILE=/app/data/tesla-tokens.json
 TESLA_COMMAND_PROXY_URL=https://tesla-command-proxy:4443
 TESLA_COMMAND_PROXY_CA_CERT=/app/certs/proxy-cert.pem
@@ -130,7 +139,19 @@ tesla.example.com {
 }
 ```
 
-## 8. Enroll the Key on the Car
+Use the setup page `Check` button to confirm the public HTTPS URL returns PEM public-key content.
+
+## 8. Register the Tesla Partner Domain
+
+In the setup page:
+
+1. Click `Check partner token` to verify the Tesla client credentials can request a short-lived partner token.
+2. Click `Register domain` after the public key URL check passes.
+3. Click `Check registration` to confirm Tesla can read the public key for your domain.
+
+These actions call Tesla's partner endpoints with the public host from `PUBLIC_BASE_URL`. They do not expose the partner access token in the browser.
+
+## 9. Enroll the Key on the Car
 
 Open this on your phone while signed into the Tesla app:
 
@@ -140,7 +161,11 @@ https://tesla.com/_ak/YOUR_DOMAIN?vin=YOUR_VIN
 
 Approve the key enrollment. The vehicle must be reachable.
 
-## 9. Complete Tesla OAuth
+## 10. Complete Tesla OAuth
+
+The setup page can build the Tesla authorization URL and exchange a pasted code for a local token file.
+
+Manual script path:
 
 Build the Tesla authorization URL:
 
@@ -158,7 +183,23 @@ docker compose run --rm alexa-tesla node scripts/exchange-code.js "PASTE_CODE_HE
 
 The token file is written under `data/` through the Docker volume.
 
-## 10. Start or Restart the Service
+## 11. Create the Alexa Skill
+
+Open the Alexa developer console from the setup page or directly:
+
+```text
+https://developer.amazon.com/alexa/console/ask
+```
+
+Use the interaction model download and set the HTTPS endpoint to:
+
+```text
+https://YOUR_DOMAIN/alexa
+```
+
+The setup page also provides a customized `skill.json` download with the endpoint filled in from `PUBLIC_BASE_URL`.
+
+## 12. Start or Restart the Service
 
 ```bash
 docker compose up -d --build
@@ -172,7 +213,7 @@ Follow logs:
 docker compose logs -f alexa-tesla tesla-command-proxy
 ```
 
-## 11. Validate Before Alexa
+## 13. Validate Before Alexa
 
 ```bash
 ./scripts/validate-home-server.sh
@@ -180,7 +221,17 @@ docker compose logs -f alexa-tesla tesla-command-proxy
 
 This checks that required files, Docker, and required `.env` values are present. It does not call Tesla or expose secrets.
 
-## 12. Update Later
+## 14. Disable Setup
+
+After the status cards are green enough for your setup and Alexa is working, click `Disable setup` on the setup page and restart:
+
+```bash
+docker compose up -d
+```
+
+The `/alexa` and `/health` endpoints remain active.
+
+## 15. Update Later
 
 ```bash
 ./scripts/update-home-server.sh

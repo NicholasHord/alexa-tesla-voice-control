@@ -18,6 +18,8 @@
 
 5. Copy the client ID and client secret into `.env`.
 
+Tesla requires partner registration for each developer app/domain. The setup page can call the partner token and partner account endpoints after your app credentials and public domain are configured.
+
 ## 2. Configure Fleet API Region
 
 The default `.env.example` uses North America:
@@ -55,15 +57,30 @@ go install ./cmd/tesla-keygen
 tesla-keygen -key-file ../keys/private-key.pem create > ../keys/public-key.pem
 ```
 
-Host that public key at:
+The home-server install script copies the public key to `public/com.tesla.3p.public-key.pem`. The app serves it at:
 
 ```text
 https://YOUR_DOMAIN/.well-known/appspecific/com.tesla.3p.public-key.pem
 ```
 
-Your web server, Cloudflare Tunnel origin, or reverse proxy can serve `keys/public-key.pem` at that path. Do not serve or upload `keys/private-key.pem`.
+Your reverse proxy or tunnel should forward that HTTPS host to the app. Do not serve or upload `keys/private-key.pem`.
 
-## 4. Enroll the Vehicle
+## 4. Register the Partner Domain
+
+Open the setup page and use this order:
+
+1. `Check` the public key URL.
+2. `Check partner token`.
+3. `Register domain`.
+4. `Check registration`.
+
+The registration request uses the host from `PUBLIC_BASE_URL`, for example `tesla.example.com`, and sends it to Tesla as:
+
+```json
+{ "domain": "tesla.example.com" }
+```
+
+## 5. Enroll the Vehicle
 
 After the public key is reachable, install the virtual key on your vehicle:
 
@@ -73,7 +90,11 @@ https://tesla.com/_ak/YOUR_DOMAIN?vin=YOUR_VIN
 
 Open that URL on your phone while signed into the Tesla account that owns or can control the vehicle. Complete Tesla's authorization flow. The car may ask for confirmation.
 
-## 5. Obtain OAuth Tokens
+## 6. Obtain OAuth Tokens
+
+The setup page can create the Tesla authorization URL and exchange the pasted authorization code.
+
+Manual script path:
 
 Create an authorization URL:
 
@@ -91,7 +112,7 @@ npm run oauth:exchange -- "PASTE_CODE_HERE"
 
 The refreshed token set is saved to `TESLA_TOKEN_FILE`, usually `./data/tesla-tokens.json`. That file is excluded from Git.
 
-## 6. Confirm Vehicle Access
+## 7. Confirm Vehicle Access
 
 Start the service and test status:
 

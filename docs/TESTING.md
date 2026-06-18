@@ -5,7 +5,11 @@
 ```bash
 npm install
 npm test
+bash -n scripts/*.sh
+node -e "const fs=require('node:fs'); for (const file of ['package.json','package-lock.json','ask-resources.json','alexa/interaction-model.json','skill-package/skill.json','skill-package/interactionModels/custom/en-US.json']) JSON.parse(fs.readFileSync(file,'utf8'));"
 ```
+
+CI also checks that generated `.env`, key, cert, and token files are not tracked.
 
 ## Local Alexa Request Test
 
@@ -85,3 +89,19 @@ docker compose logs tesla-command-proxy
 ```
 
 A command failure mentioning virtual-key authorization usually means the public key is not hosted at the required path, the virtual key was not enrolled, or the wrong private key is mounted.
+
+## Setup UI Acceptance Test
+
+On a real Docker host:
+
+1. Run the one-shot installer.
+2. Open the setup URL and confirm `HOST_PORT` is visible in configuration.
+3. Save `PUBLIC_BASE_URL`, Tesla app credentials, VIN, and Alexa skill ID.
+4. Run `./scripts/generate-tesla-virtual-key.sh`.
+5. Restart with `docker compose up -d --build`.
+6. Use the setup page to check the public key URL.
+7. Use `Check partner token`, `Register domain`, and `Check registration`.
+8. Complete the OAuth link and code exchange.
+9. Download the Alexa interaction model or customized `skill.json`.
+10. Confirm `curl http://localhost:18765/health` returns `{"ok":true}`.
+11. Disable setup and restart.

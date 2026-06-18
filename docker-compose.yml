@@ -11,11 +11,11 @@ services:
       - ./public:/app/public:ro
     ports:
       - "${HOST_PORT:-18765}:3000"
-    depends_on:
-      - tesla-command-proxy
 
   tesla-command-proxy:
     image: tesla/vehicle-command:latest
+    profiles:
+      - vehicle-commands
     restart: unless-stopped
     command:
       - "-host"

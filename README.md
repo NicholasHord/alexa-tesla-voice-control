@@ -32,7 +32,13 @@ Alexa device
 
 The lowest-cost recommended deployment is Docker on your home server behind a free HTTPS reverse proxy such as Caddy with Let's Encrypt, nginx with Let's Encrypt, or a free Cloudflare Tunnel. AWS Lambda is not the primary path here because the official command proxy and vehicle private key are simpler and safer to run on your own host.
 
-## One-Shot Install
+## Quick Install
+
+Repo URL:
+
+```text
+https://github.com/NicholasHord/alexa-tesla-voice-control.git
+```
 
 On a Linux server with Docker and Git:
 
@@ -40,11 +46,19 @@ On a Linux server with Docker and Git:
 curl -fsSL https://raw.githubusercontent.com/NicholasHord/alexa-tesla-voice-control/master/scripts/install-home-server.sh | bash
 ```
 
-The installer clones this repo into `/opt/alexa-tesla`, prepares local secret directories, starts Docker Compose, and prints a setup URL like:
+If Docker is not installed and you want the installer to use Docker's official Linux convenience installer, opt in explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NicholasHord/alexa-tesla-voice-control/master/scripts/install-home-server.sh | INSTALL_DOCKER=1 bash
+```
+
+The installer clones this repo into `/opt/alexa-tesla`, prepares local secret directories, checks that `HOST_PORT` is available, starts the setup UI, and prints a setup URL like:
 
 ```text
 http://SERVER_IP:18765/setup?token=SETUP_TOKEN
 ```
+
+The Tesla command proxy is not started until after you generate the virtual key. `scripts/generate-tesla-virtual-key.sh` enables `COMPOSE_PROFILES=vehicle-commands` and then tells you to restart Docker Compose.
 
 For manual install:
 
@@ -64,14 +78,28 @@ Open the setup URL printed by the installer. The page is protected by `SETUP_ADM
 The setup page can:
 
 - save local `.env` values
+- show setup status cards for `.env`, public URL, key files, Tesla OAuth token, Alexa skill ID, command proxy readiness, and setup disablement
 - show the Tesla public-key URL
 - check whether the Tesla public key is reachable
+- request a short-lived Tesla partner token without exposing it in the browser
+- register your public domain with Tesla's partner endpoint
+- check Tesla partner public-key registration
 - build the Tesla OAuth authorization link
 - exchange the pasted Tesla OAuth code for a local token file
 - download the Alexa interaction model
+- download a customized `skill.json` with your `PUBLIC_BASE_URL` endpoint filled in
 - show copyable commands for key generation and Docker restart
+- disable the setup page when configuration is complete
 
 Tesla developer app creation, Tesla virtual-key enrollment, and Alexa skill creation still require account-owner confirmation in Tesla and Amazon.
+
+## What This Cannot Automate
+
+- Creating and approving your Tesla developer application/domain in Tesla's developer portal.
+- Replacing Tesla's required ownership, consent, or approval steps.
+- Enrolling the virtual key on the vehicle without you approving the Tesla flow.
+- Creating and testing the Alexa development skill inside Amazon's developer console.
+- Providing public HTTPS; use a reverse proxy, Cloudflare Tunnel, or another HTTPS path for `PUBLIC_BASE_URL`.
 
 Detailed steps are in [docs/HOME_SERVER_INSTALL.md](docs/HOME_SERVER_INSTALL.md), [docs/TESLA_SETUP.md](docs/TESLA_SETUP.md), [docs/ALEXA_SKILL.md](docs/ALEXA_SKILL.md), and [docs/PUBLIC_SETUP.md](docs/PUBLIC_SETUP.md).
 
@@ -104,14 +132,19 @@ Detailed steps are in [docs/HOME_SERVER_INSTALL.md](docs/HOME_SERVER_INSTALL.md)
 |-- src/
 |   |-- alexa.js
 |   |-- config.js
+|   |-- envFile.js
 |   |-- logger.js
 |   |-- server.js
+|   |-- setup.js
 |   |-- teslaClient.js
 |   `-- tokenStore.js
 |-- test/
 |   |-- alexa.test.js
+|   |-- envFile.test.js
 |   |-- packaging.test.js
+|   |-- setup.test.js
 |   `-- teslaClient.test.js
+|-- .github/workflows/ci.yml
 |-- .env.example
 |-- ask-resources.json
 |-- Dockerfile
@@ -149,11 +182,12 @@ Unlocking and trunk/frunk commands require the configured command PIN when `COMM
    https://tesla.com/_ak/YOUR_DOMAIN?vin=YOUR_VIN
    ```
 
-4. Copy `.env.example` to `.env` and fill in your values.
-5. Run the OAuth helper scripts to obtain and store an initial refresh token.
-6. Start Docker Compose.
-7. Create an Alexa Custom Skill using `alexa/interaction-model.json`, or use the included ASK CLI package under `skill-package/`.
-8. Set the skill endpoint to `https://YOUR_DOMAIN/alexa`.
+4. Register or check the domain from the setup page after the public key URL is reachable.
+5. Copy `.env.example` to `.env` and fill in your values, or use the setup page.
+6. Run the OAuth helper scripts or setup page OAuth flow to store a Tesla token.
+7. Restart Docker Compose after key generation enables the command-proxy profile.
+8. Create an Alexa Custom Skill using the setup-page downloads, `alexa/interaction-model.json`, or the included ASK CLI package under `skill-package/`.
+9. Set the skill endpoint to `https://YOUR_DOMAIN/alexa`.
 
 See [docs/HOME_SERVER_INSTALL.md](docs/HOME_SERVER_INSTALL.md), [docs/TESLA_SETUP.md](docs/TESLA_SETUP.md), [docs/ALEXA_SKILL.md](docs/ALEXA_SKILL.md), and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for complete steps.
 
@@ -192,6 +226,8 @@ ask deploy
 ## References
 
 - Tesla Fleet API authentication: https://developer.tesla.com/docs/fleet-api/authentication/third-party-tokens
+- Tesla partner tokens: https://developer.tesla.com/docs/fleet-api/authentication/partner-tokens
+- Tesla partner endpoints: https://developer.tesla.com/docs/fleet-api/endpoints/partner-endpoints
 - Tesla vehicle commands: https://developer.tesla.com/docs/fleet-api/endpoints/vehicle-commands
 - Tesla virtual keys: https://developer.tesla.com/docs/fleet-api/virtual-keys/developer-guide
 - Tesla official vehicle-command proxy: https://github.com/teslamotors/vehicle-command

@@ -1,6 +1,6 @@
 import express from 'express';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { request } from 'undici';
 import { readEnvValues, writeEnvValues } from './envFile.js';
@@ -10,6 +10,7 @@ const WELL_KNOWN_KEY_PATH = '/.well-known/appspecific/com.tesla.3p.public-key.pe
 
 const FIELDS = [
   { key: 'PUBLIC_BASE_URL', label: 'Public HTTPS base URL', placeholder: 'https://tesla.example.com' },
+  { key: 'HOST_PORT', label: 'Host setup port', placeholder: '18765' },
   { key: 'ALEXA_SKILL_ID', label: 'Alexa skill ID', placeholder: 'amzn1.ask.skill.xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' },
   { key: 'TESLA_CLIENT_ID', label: 'Tesla client ID', sensitive: true },
   { key: 'TESLA_CLIENT_SECRET', label: 'Tesla client secret', sensitive: true },
@@ -19,16 +20,15 @@ const FIELDS = [
   { key: 'TESLA_AUTH_BASE_URL', label: 'Tesla auth base URL' },
   { key: 'TESLA_FLEET_BASE_URL', label: 'Tesla Fleet API base URL' },
   { key: 'TESLA_OAUTH_REDIRECT_URI', label: 'Tesla OAuth redirect URI', placeholder: 'https://tesla.example.com/oauth/callback' },
+  { key: 'TESLA_PARTNER_SCOPES', label: 'Tesla partner token scopes' },
   { key: 'TESLA_TOKEN_FILE', label: 'Tesla token file' },
   { key: 'TESLA_COMMAND_PROXY_URL', label: 'Command proxy URL' },
   { key: 'TESLA_COMMAND_PROXY_CA_CERT', label: 'Command proxy CA certificate' },
-  { key: 'TESLA_PUBLIC_KEY_FILE', label: 'Tesla public key file' },
-  { key: 'SETUP_ENABLED', label: 'Setup UI enabled' }
+  { key: 'TESLA_PUBLIC_KEY_FILE', label: 'Tesla public key file' }
 ];
 
-const SENSITIVE_KEYS = new Set(FIELDS.filter((field) => field.sensitive).map((field) => field.key));
-
 const DEFAULTS = {
+  HOST_PORT: '18765',
   TESLA_AUDIENCE: 'https://fleet-api.prd.na.vn.cloud.tesla.com',
   TESLA_AUTH_BASE_URL: 'https://fleet-auth.prd.vn.cloud.tesla.com',
   TESLA_FLEET_BASE_URL: 'https://fleet-api.prd.na.vn.cloud.tesla.com',
@@ -36,11 +36,14 @@ const DEFAULTS = {
   TESLA_COMMAND_PROXY_URL: 'https://tesla-command-proxy:4443',
   TESLA_COMMAND_PROXY_CA_CERT: '/app/certs/proxy-cert.pem',
   TESLA_PUBLIC_KEY_FILE: '/app/public/com.tesla.3p.public-key.pem',
+  TESLA_PARTNER_SCOPES: 'openid vehicle_device_data vehicle_cmds',
+  COMPOSE_PROFILES: '',
   SETUP_ENABLED: 'true'
 };
 
 const REQUIRED_KEYS = [
   'PUBLIC_BASE_URL',
+  'HOST_PORT',
   'ALEXA_SKILL_ID',
   'TESLA_CLIENT_ID',
   'TESLA_CLIENT_SECRET',
@@ -53,6 +56,11 @@ const REQUIRED_KEYS = [
   'TESLA_COMMAND_PROXY_CA_CERT',
   'TESLA_PUBLIC_KEY_FILE'
 ];
+
+function optionalFileToHostPath(filePath) {
+  if (!filePath) return '';
+  return filePath.replace(/^\/app\//, './');
+}
 
 function fixedEqual(a, b) {
   const left = Buffer.from(String(a || ''));
@@ -106,16 +114,53 @@ function publicBase(values) {
   return String(values.PUBLIC_BASE_URL || '').replace(/\/$/, '');
 }
 
-function teslaEnrollUrl(values) {
+function parsePublicBase(values) {
   const base = publicBase(values);
-  const host = base ? new URL(base).host : 'YOUR_DOMAIN';
+  if (!base) return { ok: false, error: 'PUBLIC_BASE_URL is required.' };
+  try {
+    const url = new URL(base);
+    if (url.protocol !== 'https:') return { ok: false, error: 'PUBLIC_BASE_URL must start with https://.' };
+    return { ok: true, url, base: url.toString().replace(/\/$/, '') };
+  } catch {
+    return { ok: false, error: 'PUBLIC_BASE_URL is not a valid URL.' };
+  }
+}
+
+function teslaEnrollUrl(values) {
+  const parsed = parsePublicBase(values);
+  const host = parsed.ok ? parsed.url.host : 'YOUR_DOMAIN';
   const vin = values.TESLA_VIN || 'YOUR_VIN';
   return `https://tesla.com/_ak/${host}?vin=${encodeURIComponent(vin)}`;
 }
 
 function oauthRedirect(values) {
-  const base = publicBase(values);
-  return values.TESLA_OAUTH_REDIRECT_URI || (base ? `${base}/oauth/callback` : '');
+  const parsed = parsePublicBase(values);
+  return values.TESLA_OAUTH_REDIRECT_URI || (parsed.ok ? `${parsed.base}/oauth/callback` : '');
+}
+
+function publicKeyUrl(values) {
+  const parsed = parsePublicBase(values);
+  return parsed.ok ? `${parsed.base}${WELL_KNOWN_KEY_PATH}` : '';
+}
+
+function publicDomain(values) {
+  const parsed = parsePublicBase(values);
+  return parsed.ok ? parsed.url.host : '';
+}
+
+function endpointUri(values) {
+  const parsed = parsePublicBase(values);
+  return parsed.ok ? `${parsed.base}/alexa` : 'https://YOUR_DOMAIN/alexa';
+}
+
+async function fileExists(filePath) {
+  if (!filePath) return false;
+  try {
+    await access(resolve(optionalFileToHostPath(filePath)));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function safeFieldState(values) {
@@ -206,6 +251,11 @@ function renderSetupPage(nonce) {
     </section>
 
     <section class="panel">
+      <h2>Setup Status</h2>
+      <div id="statusGrid" class="status-grid"></div>
+    </section>
+
+    <section class="panel">
       <h2>Guided Steps</h2>
       <ol class="steps">
         <li>
@@ -222,6 +272,12 @@ function renderSetupPage(nonce) {
           <strong>Publish public key</strong>
           <a id="publicKeyUrl" target="_blank" rel="noreferrer"></a>
           <button id="checkPublicKey" type="button">Check</button>
+        </li>
+        <li>
+          <strong>Register Tesla domain</strong>
+          <button id="checkPartnerToken" type="button">Check partner token</button>
+          <button id="registerPartner" type="button">Register domain</button>
+          <button id="checkPartner" type="button">Check registration</button>
         </li>
         <li>
           <strong>Enroll vehicle key</strong>
@@ -243,6 +299,8 @@ function renderSetupPage(nonce) {
           <strong>Create Alexa skill</strong>
           <a href="https://developer.amazon.com/alexa/console/ask" target="_blank" rel="noreferrer">Open Alexa developer console</a>
           <button id="downloadModel" type="button">Download interaction model</button>
+          <button id="downloadSkill" type="button">Download skill package</button>
+          <code id="alexaEndpoint"></code>
         </li>
         <li>
           <strong>Start or restart</strong>
@@ -255,6 +313,7 @@ function renderSetupPage(nonce) {
     <section class="panel">
       <h2>Validation</h2>
       <button id="validateConfig" type="button">Validate configuration</button>
+      <button id="disableSetup" class="danger" type="button">Disable setup</button>
       <pre id="output" aria-live="polite"></pre>
     </section>
   </main>
@@ -276,11 +335,13 @@ h1,h2{margin:0;letter-spacing:0}h1{font-size:24px}h2{font-size:18px}.topbar p,.n
 input,select{width:100%;min-height:38px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--text);padding:8px 10px;font:inherit}
 button,.button{min-height:38px;border:0;border-radius:6px;background:var(--accent);color:#fff;padding:8px 12px;font-weight:700;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
 button.secondary,.button.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}button.copy{background:transparent;color:var(--accent);border:1px solid var(--line);margin-left:8px}
+button.danger{background:var(--danger)}
+.status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.status{border:1px solid var(--line);border-radius:6px;padding:10px}.status strong{display:block}.status span{color:var(--muted);font-size:13px}.status.ok{border-color:var(--accent)}.status.warn{border-color:#d99a00}.status.fail{border-color:var(--danger)}
 .steps{display:grid;gap:14px;padding-left:20px}.steps li{padding-left:4px}.steps strong{display:block;margin-bottom:4px}
 code{display:inline-block;max-width:100%;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:7px 9px;background:rgba(127,127,127,.08)}
 a{color:var(--accent);overflow-wrap:anywhere}.inline{display:flex;gap:8px}.inline input{flex:1}pre{min-height:120px;margin:12px 0 0;white-space:pre-wrap;word-break:break-word;border:1px solid var(--line);border-radius:6px;padding:12px;background:rgba(127,127,127,.08)}
 .login{max-width:420px;margin:12vh auto;padding:24px;background:var(--panel);border:1px solid var(--line);border-radius:8px}.login form{display:grid;gap:10px;margin-top:16px}
-@media (max-width:900px){.layout{grid-template-columns:1fr}.grid{grid-template-columns:1fr}.topbar{align-items:flex-start;flex-direction:column}.inline{flex-direction:column}}
+@media (max-width:900px){.layout{grid-template-columns:1fr}.grid,.status-grid{grid-template-columns:1fr}.topbar{align-items:flex-start;flex-direction:column}.inline{flex-direction:column}}
 `;
 }
 
@@ -297,28 +358,32 @@ async function api(path, options = {}) {
   if (!response.ok || body.ok === false) throw new Error(body.error || response.statusText);
   return body;
 }
+function renderStatuses(statuses) {
+  const grid = document.querySelector('#statusGrid');
+  grid.replaceChildren();
+  for (const status of statuses) {
+    const card = document.createElement('div');
+    card.className = 'status ' + status.level;
+    const title = document.createElement('strong');
+    title.textContent = status.label;
+    const detail = document.createElement('span');
+    detail.textContent = status.message;
+    card.append(title, detail);
+    grid.append(card);
+  }
+}
 function fieldInput(field, state) {
   const wrapper = document.createElement('div');
   wrapper.className = 'field';
   const label = document.createElement('label');
   label.htmlFor = field.key;
   label.textContent = field.label;
-  const input = document.createElement(field.key === 'SETUP_ENABLED' ? 'select' : 'input');
+  const input = document.createElement('input');
   input.id = field.key;
   input.name = field.key;
-  if (field.key === 'SETUP_ENABLED') {
-    for (const value of ['true','false']) {
-      const option = document.createElement('option');
-      option.value = value;
-      option.textContent = value;
-      input.append(option);
-    }
-    input.value = state.value || 'true';
-  } else {
-    input.type = field.sensitive ? 'password' : 'text';
-    input.placeholder = field.sensitive && state.hasValue ? 'Saved; leave blank to keep' : (field.placeholder || '');
-    input.value = state.value || '';
-  }
+  input.type = field.sensitive ? 'password' : 'text';
+  input.placeholder = field.sensitive && state.hasValue ? 'Saved; leave blank to keep' : (field.placeholder || '');
+  input.value = state.value || '';
   const hint = document.createElement('span');
   hint.textContent = field.sensitive && state.hasValue ? 'Value saved locally' : ' ';
   wrapper.append(label, input, hint);
@@ -331,6 +396,8 @@ async function loadState() {
   document.querySelector('#publicKeyUrl').href = state.links.publicKeyUrl;
   document.querySelector('#publicKeyUrl').textContent = state.links.publicKeyUrl || 'Set PUBLIC_BASE_URL first';
   document.querySelector('#teslaEnrollUrl').href = state.links.teslaEnrollUrl;
+  document.querySelector('#alexaEndpoint').textContent = state.links.alexaEndpoint;
+  renderStatuses(state.statuses);
   show(state.checks);
 }
 document.querySelector('#saveConfig').addEventListener('click', async () => {
@@ -340,6 +407,9 @@ document.querySelector('#saveConfig').addEventListener('click', async () => {
 });
 document.querySelector('#validateConfig').addEventListener('click', async () => show(await api('validate', { method: 'POST', body: '{}' })));
 document.querySelector('#checkPublicKey').addEventListener('click', async () => show(await api('check-public-key', { method: 'POST', body: '{}' })));
+document.querySelector('#checkPartnerToken').addEventListener('click', async () => show(await api('partner-token', { method: 'POST', body: '{}' })));
+document.querySelector('#registerPartner').addEventListener('click', async () => show(await api('register-partner', { method: 'POST', body: '{}' })));
+document.querySelector('#checkPartner').addEventListener('click', async () => show(await api('check-partner-registration', { method: 'POST', body: '{}' })));
 document.querySelector('#buildOauth').addEventListener('click', async () => {
   const result = await api('oauth-url', { method: 'POST', body: '{}' });
   const link = document.querySelector('#oauthUrl');
@@ -352,6 +422,10 @@ document.querySelector('#exchangeCode').addEventListener('click', async () => {
   show(await api('exchange-code', { method: 'POST', body: JSON.stringify({ code }) }));
 });
 document.querySelector('#downloadModel').addEventListener('click', () => { window.location.href = '/setup/api/alexa-model'; });
+document.querySelector('#downloadSkill').addEventListener('click', () => { window.location.href = '/setup/api/skill-json'; });
+document.querySelector('#disableSetup').addEventListener('click', async () => {
+  show(await api('disable-setup', { method: 'POST', body: '{}' }));
+});
 document.querySelectorAll('.copy').forEach((button) => button.addEventListener('click', async () => {
   const text = document.querySelector(button.dataset.copy).textContent;
   await navigator.clipboard.writeText(text);
@@ -367,7 +441,7 @@ async function tokenConfig(config) {
   return state;
 }
 
-export function createSetupRouter({ config }) {
+export function createSetupRouter({ config, requestImpl = request }) {
   const router = express.Router();
 
   router.use(express.json({ limit: '64kb' }));
@@ -407,16 +481,18 @@ export function createSetupRouter({ config }) {
 
   router.get('/api/state', async (req, res) => {
     const values = req.setupValues;
-    const base = publicBase(values);
+    const setupStatuses = await statuses(values, config);
     res.json({
       ok: true,
       fields: safeFieldState(values),
       links: {
-        publicKeyUrl: base ? `${base}${WELL_KNOWN_KEY_PATH}` : '',
+        publicKeyUrl: publicKeyUrl(values),
         teslaEnrollUrl: teslaEnrollUrl(values),
+        alexaEndpoint: endpointUri(values),
         alexaConsoleUrl: 'https://developer.amazon.com/alexa/console/ask',
         teslaDeveloperUrl: 'https://developer.tesla.com/'
       },
+      statuses: setupStatuses,
       checks: validateValues(values)
     });
   });
@@ -432,7 +508,8 @@ export function createSetupRouter({ config }) {
     }
 
     if (updates.PUBLIC_BASE_URL && !updates.TESLA_OAUTH_REDIRECT_URI) {
-      updates.TESLA_OAUTH_REDIRECT_URI = `${updates.PUBLIC_BASE_URL.replace(/\/$/, '')}/oauth/callback`;
+      const parsed = parsePublicBase({ PUBLIC_BASE_URL: updates.PUBLIC_BASE_URL });
+      if (parsed.ok) updates.TESLA_OAUTH_REDIRECT_URI = `${parsed.base}/oauth/callback`;
     }
 
     await writeEnvValues(config.appEnvFile, updates);
@@ -440,7 +517,7 @@ export function createSetupRouter({ config }) {
   });
 
   router.post('/api/validate', async (req, res) => {
-    res.json({ ok: true, ...validateValues(req.setupValues) });
+    res.json({ ok: true, ...(await validateWithStatuses(req.setupValues, config)) });
   });
 
   router.post('/api/oauth-url', async (req, res) => {
@@ -464,54 +541,108 @@ export function createSetupRouter({ config }) {
     res.json({ ok: true, url: url.toString(), state });
   });
 
-  router.post('/api/exchange-code', async (req, res) => {
-    const code = String(req.body?.code || '').trim();
-    if (!code) return jsonError(res, 400, 'Authorization code is required.');
-    const values = req.setupValues;
-    for (const key of ['TESLA_CLIENT_ID', 'TESLA_CLIENT_SECRET', 'TESLA_AUDIENCE', 'TESLA_AUTH_BASE_URL']) {
-      if (!values[key]) return jsonError(res, 400, `${key} is required.`);
+  router.post('/api/partner-token', async (req, res) => {
+    try {
+      const payload = await requestPartnerToken(req.setupValues, requestImpl);
+      res.json({
+        ok: true,
+        message: 'Tesla partner token request succeeded.',
+        tokenType: payload.token_type || 'Bearer',
+        expiresIn: payload.expires_in || null,
+        scope: payload.scope || ''
+      });
+    } catch (error) {
+      return jsonError(res, 400, error.message);
     }
+  });
 
-    const form = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: values.TESLA_CLIENT_ID,
-      client_secret: values.TESLA_CLIENT_SECRET,
-      code,
-      audience: values.TESLA_AUDIENCE,
-      redirect_uri: oauthRedirect(values)
-    });
+  router.post('/api/register-partner', async (req, res) => {
+    try {
+      const values = req.setupValues;
+      const keyCheck = await checkPublicKey(values, requestImpl);
+      if (!keyCheck.ok) return jsonError(res, 400, `Public key check failed: ${keyCheck.message}`);
+      const domain = publicDomain(values);
+      if (!domain) return jsonError(res, 400, 'A valid PUBLIC_BASE_URL is required.');
+      const token = await getPartnerToken(values, requestImpl);
+      const response = await requestImpl(`${values.TESLA_FLEET_BASE_URL.replace(/\/$/, '')}/api/1/partner_accounts`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ domain })
+      });
+      const payload = await readResponseJson(response);
+      if (response.statusCode >= 400) return jsonError(res, 400, teslaError(payload, 'Tesla partner registration failed.'));
+      res.json({ ok: true, domain, response: payload.response || payload });
+    } catch (error) {
+      return jsonError(res, 400, error.message);
+    }
+  });
 
-    const response = await request(`${values.TESLA_AUTH_BASE_URL.replace(/\/$/, '')}/oauth2/v3/token`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: form.toString()
-    });
-    const text = await response.body.text();
-    const payload = text ? JSON.parse(text) : {};
-    if (response.statusCode >= 400) return jsonError(res, 400, payload.error_description || payload.error || 'Tesla token exchange failed.');
+  router.post('/api/check-partner-registration', async (req, res) => {
+    try {
+      const values = req.setupValues;
+      const domain = publicDomain(values);
+      if (!domain) return jsonError(res, 400, 'A valid PUBLIC_BASE_URL is required.');
+      const token = await getPartnerToken(values, requestImpl);
+      const url = `${values.TESLA_FLEET_BASE_URL.replace(/\/$/, '')}/api/1/partner_accounts/public_key?domain=${encodeURIComponent(domain)}`;
+      const response = await requestImpl(url, {
+        method: 'GET',
+        headers: { authorization: `Bearer ${token}` }
+      });
+      const payload = await readResponseJson(response);
+      if (response.statusCode >= 400) return jsonError(res, 400, teslaError(payload, 'Tesla partner public-key check failed.'));
+      res.json({ ok: true, domain, response: payload.response || payload });
+    } catch (error) {
+      return jsonError(res, 400, error.message);
+    }
+  });
 
-    const tokenStore = new TokenStore({
-      tokenFile: values.TESLA_TOKEN_FILE || DEFAULTS.TESLA_TOKEN_FILE,
-      initialRefreshToken: values.TESLA_REFRESH_TOKEN || ''
-    });
-    await tokenStore.save(payload);
-    res.json({ ok: true, message: 'Tesla token saved locally.' });
+  router.post('/api/exchange-code', async (req, res) => {
+    try {
+      const code = String(req.body?.code || '').trim();
+      if (!code) return jsonError(res, 400, 'Authorization code is required.');
+      const values = req.setupValues;
+      for (const key of ['TESLA_CLIENT_ID', 'TESLA_CLIENT_SECRET', 'TESLA_AUDIENCE', 'TESLA_AUTH_BASE_URL']) {
+        if (!values[key]) return jsonError(res, 400, `${key} is required.`);
+      }
+
+      const form = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: values.TESLA_CLIENT_ID,
+        client_secret: values.TESLA_CLIENT_SECRET,
+        code,
+        audience: values.TESLA_AUDIENCE,
+        redirect_uri: oauthRedirect(values)
+      });
+
+      const response = await requestImpl(`${values.TESLA_AUTH_BASE_URL.replace(/\/$/, '')}/oauth2/v3/token`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: form.toString()
+      });
+      const payload = await readResponseJson(response);
+      if (response.statusCode >= 400) return jsonError(res, 400, teslaError(payload, 'Tesla token exchange failed.'));
+
+      const tokenStore = new TokenStore({
+        tokenFile: values.TESLA_TOKEN_FILE || DEFAULTS.TESLA_TOKEN_FILE,
+        initialRefreshToken: values.TESLA_REFRESH_TOKEN || ''
+      });
+      await tokenStore.save(payload);
+      res.json({ ok: true, message: 'Tesla token saved locally.' });
+    } catch (error) {
+      return jsonError(res, 400, error.message);
+    }
   });
 
   router.post('/api/check-public-key', async (req, res) => {
-    const base = publicBase(req.setupValues);
-    if (!base) return jsonError(res, 400, 'PUBLIC_BASE_URL is required.');
-    const url = `${base}${WELL_KNOWN_KEY_PATH}`;
-    const response = await request(url, { method: 'GET' });
-    const body = await response.body.text();
-    const fingerprint = createHash('sha256').update(body).digest('hex').slice(0, 16);
-    res.json({
-      ok: response.statusCode >= 200 && response.statusCode < 300 && body.includes('-----BEGIN PUBLIC KEY-----'),
-      statusCode: response.statusCode,
-      url,
-      fingerprint,
-      message: body.includes('-----BEGIN PUBLIC KEY-----') ? 'Public key is reachable.' : 'Public key response does not look like a PEM public key.'
-    });
+    try {
+      const result = await checkPublicKey(req.setupValues, requestImpl);
+      res.status(result.ok ? 200 : 400).json(result);
+    } catch (error) {
+      return jsonError(res, 400, error.message);
+    }
   });
 
   router.get('/api/alexa-model', async (req, res, next) => {
@@ -525,6 +656,23 @@ export function createSetupRouter({ config }) {
     }
   });
 
+  router.get('/api/skill-json', async (req, res, next) => {
+    try {
+      const skill = JSON.parse(await readFile(resolve('skill-package/skill.json'), 'utf8'));
+      skill.manifest.apis.custom.endpoint.uri = endpointUri(req.setupValues);
+      res.setHeader('content-type', 'application/json');
+      res.setHeader('content-disposition', 'attachment; filename="skill.json"');
+      res.send(JSON.stringify(skill, null, 2));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/api/disable-setup', async (req, res) => {
+    await writeEnvValues(config.appEnvFile, { SETUP_ENABLED: 'false' });
+    res.json({ ok: true, message: 'Setup disabled. Restart with docker compose up -d for the change to take effect.' });
+  });
+
   return router;
 }
 
@@ -532,8 +680,92 @@ function validateValues(values) {
   const missing = REQUIRED_KEYS.filter((key) => !values[key]);
   const warnings = [];
   if (String(values.SETUP_ENABLED || '').toLowerCase() === 'true') warnings.push('Disable setup after configuration is complete.');
-  if (!publicBase(values).startsWith('https://')) warnings.push('Alexa requires a public HTTPS endpoint.');
-  return { missing, warnings, ready: missing.length === 0 };
+  const parsed = parsePublicBase(values);
+  if (!parsed.ok) warnings.push(parsed.error);
+  return { missing, warnings, ready: missing.length === 0 && parsed.ok };
+}
+
+async function validateWithStatuses(values, config) {
+  const checks = validateValues(values);
+  return { ...checks, statuses: await statuses(values, config) };
+}
+
+async function statuses(values, config) {
+  const parsed = parsePublicBase(values);
+  const envFile = await fileExists(config.appEnvFile);
+  const publicKeyFile = await fileExists(values.TESLA_PUBLIC_KEY_FILE);
+  const tokenFile = await fileExists(values.TESLA_TOKEN_FILE);
+  const proxyCert = await fileExists(values.TESLA_COMMAND_PROXY_CA_CERT);
+  const privateKey = await fileExists('/app/keys/private-key.pem');
+  const commandProxyProfile = String(values.COMPOSE_PROFILES || '').split(',').includes('vehicle-commands');
+  return [
+    { label: 'Environment file', level: envFile ? 'ok' : 'fail', message: envFile ? config.appEnvFile : 'Missing APP_ENV_FILE target' },
+    { label: 'Public HTTPS URL', level: parsed.ok ? 'ok' : 'fail', message: parsed.ok ? parsed.base : parsed.error },
+    { label: 'Public key file', level: publicKeyFile ? 'ok' : 'warn', message: publicKeyFile ? 'Found locally' : 'Run ./scripts/generate-tesla-virtual-key.sh' },
+    { label: 'Public key URL', level: parsed.ok ? 'warn' : 'fail', message: parsed.ok ? 'Use Check to verify public reachability' : parsed.error },
+    { label: 'Tesla partner registration', level: 'warn', message: 'Use Register domain, then Check registration' },
+    { label: 'Tesla OAuth token', level: tokenFile ? 'ok' : 'warn', message: tokenFile ? 'Token file exists' : 'Complete OAuth exchange' },
+    { label: 'Alexa skill ID', level: values.ALEXA_SKILL_ID ? 'ok' : 'warn', message: values.ALEXA_SKILL_ID ? 'Configured' : 'Paste skill ID after creating the skill' },
+    { label: 'Command proxy readiness', level: commandProxyProfile && proxyCert && privateKey ? 'ok' : 'warn', message: commandProxyProfile ? 'Profile enabled; verify containers after restart' : 'Generate key to enable vehicle-commands profile' },
+    { label: 'Setup disabled', level: String(values.SETUP_ENABLED || '').toLowerCase() === 'false' ? 'ok' : 'warn', message: String(values.SETUP_ENABLED || '').toLowerCase() === 'false' ? 'Disabled' : 'Disable after setup is complete' }
+  ];
+}
+
+async function readResponseJson(response) {
+  const text = await response.body.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+}
+
+function teslaError(payload, fallback) {
+  return payload?.response?.reason || payload?.error_description || payload?.error || payload?.raw || fallback;
+}
+
+async function requestPartnerToken(values, requestImpl) {
+  for (const key of ['TESLA_CLIENT_ID', 'TESLA_CLIENT_SECRET', 'TESLA_AUDIENCE', 'TESLA_AUTH_BASE_URL']) {
+    if (!values[key]) throw new Error(`${key} is required.`);
+  }
+  const form = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: values.TESLA_CLIENT_ID,
+    client_secret: values.TESLA_CLIENT_SECRET,
+    audience: values.TESLA_AUDIENCE,
+    scope: values.TESLA_PARTNER_SCOPES || DEFAULTS.TESLA_PARTNER_SCOPES
+  });
+  const response = await requestImpl(`${values.TESLA_AUTH_BASE_URL.replace(/\/$/, '')}/oauth2/v3/token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: form.toString()
+  });
+  const payload = await readResponseJson(response);
+  if (response.statusCode >= 400 || !payload.access_token) {
+    throw new Error(teslaError(payload, 'Tesla partner token request failed.'));
+  }
+  return payload;
+}
+
+async function getPartnerToken(values, requestImpl) {
+  const payload = await requestPartnerToken(values, requestImpl);
+  return payload.access_token;
+}
+
+async function checkPublicKey(values, requestImpl) {
+  const url = publicKeyUrl(values);
+  if (!url) return { ok: false, error: 'invalid_public_base_url', message: 'A valid PUBLIC_BASE_URL is required.' };
+  const response = await requestImpl(url, { method: 'GET' });
+  const body = await response.body.text();
+  const looksLikeKey = body.includes('-----BEGIN PUBLIC KEY-----');
+  return {
+    ok: response.statusCode >= 200 && response.statusCode < 300 && looksLikeKey,
+    statusCode: response.statusCode,
+    url,
+    fingerprint: createHash('sha256').update(body).digest('hex').slice(0, 16),
+    message: looksLikeKey ? 'Public key is reachable.' : 'Public key response does not look like a PEM public key.'
+  };
 }
 
 export function publicKeyHandler(config) {

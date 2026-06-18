@@ -20,6 +20,13 @@
 - Confirm `TESLA_AUDIENCE` matches your Fleet API region.
 - Re-run `npm run oauth:url` and `npm run oauth:exchange` if the refresh token was revoked.
 
+## Tesla Partner Registration Fails
+
+- Confirm `PUBLIC_BASE_URL` is public HTTPS and uses the same domain registered in the Tesla developer portal.
+- Confirm the setup page public-key check succeeds before clicking `Register domain`.
+- Confirm `TESLA_CLIENT_ID`, `TESLA_CLIENT_SECRET`, `TESLA_AUDIENCE`, `TESLA_AUTH_BASE_URL`, and `TESLA_FLEET_BASE_URL`.
+- Confirm the Tesla developer app has the required Fleet API scopes and domain configuration.
+
 ## Vehicle Commands Fail
 
 - Confirm the car supports Fleet API commands.
@@ -31,6 +38,7 @@
 
 - Confirm the virtual key was installed on the vehicle.
 - Confirm `keys/private-key.pem` matches the hosted public key.
+- Confirm `COMPOSE_PROFILES=vehicle-commands` is set after key generation and Docker Compose has been restarted.
 - Confirm `tesla-command-proxy` can read the private key and TLS cert.
 - Confirm the command proxy logs do not show TLS or key parsing errors.
 
@@ -62,4 +70,3 @@ The app logs request IDs and action outcomes but redacts OAuth tokens, client se
 - Add configurable status templates.
 - Add garage geofence checks before trunk/frunk commands.
 - Add metrics for wake-up count and command success rate.
-

@@ -11,7 +11,7 @@ import { TeslaClient } from './teslaClient.js';
 import { createAlexaHandler } from './alexa.js';
 import { createSetupRouter, publicKeyHandler } from './setup.js';
 
-export function createApp(config = loadConfig({ strict: false })) {
+export function createApp(config = loadConfig({ strict: false }), options = {}) {
   const app = express();
   const tokenStore = new TokenStore({
     tokenFile: config.tesla.tokenFile,
@@ -44,7 +44,7 @@ export function createApp(config = loadConfig({ strict: false })) {
   });
 
   app.get('/.well-known/appspecific/com.tesla.3p.public-key.pem', publicKeyHandler(config));
-  app.use('/setup', createSetupRouter({ config }));
+  app.use('/setup', createSetupRouter({ config, requestImpl: options.setupRequestImpl }));
 
   const alexaMiddleware = config.alexa.disableSignatureVerification
     ? [express.json({ type: 'application/json' })]

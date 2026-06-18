@@ -97,8 +97,10 @@ Next steps:
 2. Open /setup with the setup token printed by scripts/install-home-server.sh or from .env.
 3. Fill in the Tesla, Alexa, and domain values.
 4. Run ./scripts/generate-tesla-virtual-key.sh if you do not already have a Tesla virtual key.
-5. Enroll the virtual key with https://tesla.com/_ak/YOUR_DOMAIN?vin=YOUR_VIN.
-6. Complete Tesla OAuth from the setup page.
+5. Check the public key URL and register the Tesla partner domain from the setup page.
+6. Enroll the virtual key with https://tesla.com/_ak/YOUR_DOMAIN?vin=YOUR_VIN.
+7. Complete Tesla OAuth from the setup page.
+8. Restart with docker compose up -d --build after keys exist.
 
 See docs/HOME_SERVER_INSTALL.md for the full checklist.
 NEXT

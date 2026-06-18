@@ -29,6 +29,8 @@ For a personal development skill, use the same Amazon account that your Alexa de
    https://YOUR_DOMAIN/alexa
    ```
 
+   The setup page shows this endpoint after `PUBLIC_BASE_URL` is saved.
+
 14. For the SSL certificate option, choose the trusted-certificate-authority option if you are using Let's Encrypt, Cloudflare, or another normal public CA certificate.
 15. Copy the skill ID from the developer console and set it in the server `.env`:
 
@@ -77,6 +79,8 @@ Replace:
 ```text
 https://YOUR_DOMAIN/alexa
 ```
+
+The setup page can download a customized `skill.json` with this endpoint already set from `PUBLIC_BASE_URL`.
 
 Then deploy metadata:
 
